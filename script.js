@@ -64,6 +64,34 @@ if ('IntersectionObserver' in window) {
     background.dataset.videoStatus = 'failed';
   };
 
+  const applyCoverStyles = (element) => {
+    if (!element) return;
+
+    element.style.position = 'absolute';
+    element.style.inset = '0';
+    element.style.width = '100%';
+    element.style.height = '100%';
+    element.style.border = '0';
+  };
+
+  const ensurePlayerMount = (background) => {
+    const wrapper = background.querySelector('.video-player');
+    if (!wrapper) return null;
+
+    applyCoverStyles(wrapper);
+    wrapper.style.overflow = 'hidden';
+
+    let mount = wrapper.querySelector('.video-player-mount');
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.className = 'video-player-mount';
+      wrapper.replaceChildren(mount);
+    }
+
+    applyCoverStyles(mount);
+    return { wrapper, mount };
+  };
+
   const createEmbedUrl = (videoId) => {
     const params = new URLSearchParams({
       autoplay: '1',
@@ -86,8 +114,8 @@ if ('IntersectionObserver' in window) {
 
   const mountIframeFallback = (background) => {
     const videoId = background.dataset.videoId;
-    const target = background.querySelector('.video-player');
-    if (!videoId || !target || target.dataset.mode === 'fallback') return;
+    const player = ensurePlayerMount(background);
+    if (!videoId || !player || player.wrapper.dataset.mode === 'fallback') return;
 
     const iframe = document.createElement('iframe');
     iframe.src = createEmbedUrl(videoId);
@@ -96,8 +124,9 @@ if ('IntersectionObserver' in window) {
     iframe.setAttribute('aria-hidden', 'true');
     iframe.setAttribute('tabindex', '-1');
 
-    target.replaceChildren(iframe);
-    target.dataset.mode = 'fallback';
+    applyCoverStyles(iframe);
+    player.mount.replaceChildren(iframe);
+    player.wrapper.dataset.mode = 'fallback';
 
     iframe.addEventListener('load', () => {
       window.setTimeout(() => markReady(background), 300);
@@ -106,15 +135,15 @@ if ('IntersectionObserver' in window) {
 
   const mountApiPlayer = (background) => {
     const videoId = background.dataset.videoId;
-    const target = background.querySelector('.video-player');
-    if (!videoId || !target || target.dataset.mode === 'api') return;
+    const player = ensurePlayerMount(background);
+    if (!videoId || !player || player.wrapper.dataset.mode === 'api') return;
     if (typeof window.YT === 'undefined' || typeof window.YT.Player === 'undefined') return;
 
-    target.replaceChildren();
-    target.dataset.mode = 'api';
+    player.mount.replaceChildren();
+    player.wrapper.dataset.mode = 'api';
 
     try {
-      const player = new window.YT.Player(target, {
+      const ytPlayer = new window.YT.Player(player.mount, {
         videoId,
         host: 'https://www.youtube-nocookie.com',
         playerVars: {
@@ -134,6 +163,9 @@ if ('IntersectionObserver' in window) {
         },
         events: {
           onReady: (event) => {
+            applyCoverStyles(player.mount);
+            applyCoverStyles(player.mount.querySelector('iframe'));
+
             try {
               event.target.mute();
               event.target.playVideo();
@@ -145,6 +177,9 @@ if ('IntersectionObserver' in window) {
             markReady(background);
           },
           onStateChange: (event) => {
+            applyCoverStyles(player.mount);
+            applyCoverStyles(player.mount.querySelector('iframe'));
+
             if (typeof window.YT === 'undefined' || typeof window.YT.PlayerState === 'undefined') {
               return;
             }
@@ -168,7 +203,7 @@ if ('IntersectionObserver' in window) {
         },
       });
 
-      background._ytPlayer = player;
+      background._ytPlayer = ytPlayer;
     } catch (error) {
       markFailed(background);
       mountIframeFallback(background);
